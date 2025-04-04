@@ -1,0 +1,25 @@
+{
+  "dependencies": {
+    "@chainlink/contracts": "^1.3.0",
+    "@chainlink/contracts-ccip": "^1.5.0",
+    "@openzeppelin/contracts": "^5.0.2",
+    "ethers": "^6.13.2",
+    "forge-std": "^1.1.2",
+    "solhint": "^5.0.3"
+  },
+  "name": "smarket_contracts",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.12"
+  },
+  "scripts": {
+    "test": "test"
+  },
+  "author": "Ali Moghaddam",
+  "license": "MIT"
+}
