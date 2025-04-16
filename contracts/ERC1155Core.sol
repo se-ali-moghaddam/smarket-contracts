@@ -1,14 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/**
- * THIS IS AN INITIAL CONTRACT THAT USES HARDCODED VALUES FOR CLARITY.
- * THIS IS AN INITIAL CONTRACT THAT USES UN-AUDITED CODE.
- * DO NOT USE THIS CODE IN PRODUCTION.
- */
-
 import {ERC1155Supply, ERC1155} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 error ERC1155Core_CallerIsNotActiveIssuerOrItself(address msgSender);
 error ERC1155Core_CallerIsNotAssociatedIssuer(address msgSender);
@@ -18,11 +12,9 @@ error ERC1155Core_IssuerAlreadyActive(address issuer);
 error ERC1155Core_IssuerAlreadyDeactive(address issuer);
 error ERC1155Core_TokenAlreadyLocked(uint256 tokenId);
 error ERC1155Core_TokenNotLocked(uint256 tokenId);
+error ERC1155Core_TokenAlreadyExist(uint256 tokenId);
 
-contract ERC1155Core is ERC1155Supply, AccessControl {
-    bytes32 public constant ISSUER_MANAGER_ROLE =
-        keccak256("ISSUER_MANAGER_ROLE");
-
+contract ERC1155Core is ERC1155Supply, ReentrancyGuard {
     uint256 private _nextTokenId;
 
     mapping(address issuer => bool isActive) internal _activeIssuers;
@@ -52,18 +44,14 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
     }
 
     modifier onlyUnlockedToken(uint256 id) {
-        if (_lockedTokens[id])
-            revert ERC1155Core_TokenAlreadyLocked(id);
+        if (_lockedTokens[id]) revert ERC1155Core_TokenAlreadyLocked(id);
         _;
     }
 
     // Used as the URI for all token types by relying on ID substitution, e.g. https://token-cdn-domain/{id}.json
-    constructor(string memory uri_, address defaultAdmin) ERC1155(uri_) {
-        _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
-        _grantRole(ISSUER_MANAGER_ROLE, defaultAdmin);
-    }
+    constructor(string memory uri_) ERC1155(uri_) {}
 
-    function addIssuer(address issuer) external onlyRole(ISSUER_MANAGER_ROLE) {
+    function addIssuer(address issuer) external virtual {
         if (_activeIssuers[issuer])
             revert ERC1155Core_IssuerAlreadyExists(issuer);
 
@@ -73,9 +61,7 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         _activeIssuers[issuer] = true;
     }
 
-    function removeIssuer(
-        address issuer
-    ) external onlyRole(ISSUER_MANAGER_ROLE) {
+    function removeIssuer(address issuer) external virtual {
         if (!_activeIssuers[issuer] && _activeIssuers[issuer])
             revert ERC1155Core_IssuerNotExists(issuer);
 
@@ -84,9 +70,7 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         delete _activeIssuers[issuer];
     }
 
-    function activateIssuer(
-        address issuer
-    ) external onlyRole(ISSUER_MANAGER_ROLE) {
+    function activateIssuer(address issuer) external virtual {
         if (_activeIssuers[issuer])
             revert ERC1155Core_IssuerAlreadyActive(issuer);
 
@@ -95,9 +79,7 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         _activeIssuers[issuer] = true;
     }
 
-    function deactivateIssuer(
-        address issuer
-    ) external onlyRole(ISSUER_MANAGER_ROLE) {
+    function deactivateIssuer(address issuer) external virtual {
         if (!_activeIssuers[issuer])
             revert ERC1155Core_IssuerAlreadyDeactive(issuer);
 
@@ -109,8 +91,7 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
     function lockToken(
         uint256 id
     ) external onlyActiveIssuerOrItself onlyAssociatedIssuer(id) {
-        if (_lockedTokens[id])
-            revert ERC1155Core_TokenAlreadyLocked(id);
+        if (_lockedTokens[id]) revert ERC1155Core_TokenAlreadyLocked(id);
 
         emit TokenLocked(id);
 
@@ -120,7 +101,7 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
     function lockTokenBatch(
         uint256[] memory ids
     ) external onlyActiveIssuerOrItself {
-        for (uint256 i = 0; i <= ids.length; i++) {
+        for (uint256 i = 0; i < ids.length; i++) {
             if (_lockedTokens[ids[i]])
                 revert ERC1155Core_TokenAlreadyLocked(ids[i]);
 
@@ -133,8 +114,7 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
     function unlockToken(
         uint256 id
     ) external onlyActiveIssuerOrItself onlyAssociatedIssuer(id) {
-        if (!_lockedTokens[id])
-            revert ERC1155Core_TokenNotLocked(id);
+        if (!_lockedTokens[id]) revert ERC1155Core_TokenNotLocked(id);
 
         emit TokenUnlocked(id);
 
@@ -144,7 +124,7 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
     function unlockTokenBatch(
         uint256[] memory ids
     ) external onlyActiveIssuerOrItself {
-        for (uint256 i = 0; i <= ids.length; i++) {
+        for (uint256 i = 0; i < ids.length; i++) {
             if (!_lockedTokens[ids[i]])
                 revert ERC1155Core_TokenNotLocked(ids[i]);
 
@@ -162,12 +142,12 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         uint256 amount,
         bytes memory data,
         string memory tokenUri
-    ) public onlyActiveIssuerOrItself {
+    ) public onlyActiveIssuerOrItself nonReentrant {
         uint256 id = _nextTokenId++;
 
-        _mint(to, id, amount, data);
-
         _tokenURIs[id] = tokenUri;
+
+        _mint(to, id, amount, data);
     }
 
     function mint(
@@ -176,10 +156,13 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         uint256 id,
         bytes memory data,
         string memory tokenUri
-    ) public onlyActiveIssuerOrItself {
-        _mint(to, id, amount, data);
+    ) public onlyActiveIssuerOrItself nonReentrant {
+        if (abi.encode(_tokenURIs[id]).length > 0)
+            revert ERC1155Core_TokenAlreadyExist(id);
 
         _tokenURIs[id] = tokenUri;
+
+        _mint(to, id, amount, data);
     }
 
     function mintBatch(
@@ -187,7 +170,7 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         uint256[] memory amounts,
         bytes memory data,
         string[] memory tokenUris
-    ) public onlyActiveIssuerOrItself {
+    ) public onlyActiveIssuerOrItself nonReentrant {
         uint256[] memory ids = new uint256[](tokenUris.length);
 
         for (uint256 i = 0; i < tokenUris.length; ++i) {
@@ -206,11 +189,15 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         uint256[] memory ids,
         bytes memory data,
         string[] memory tokenUris
-    ) public onlyActiveIssuerOrItself {
-        _mintBatch(to, ids, amounts, data);
+    ) public onlyActiveIssuerOrItself nonReentrant {
+        for (uint256 i = 0; i < ids.length; ++i) {
+            if (abi.encode(_tokenURIs[ids[i]]).length > 0)
+                revert ERC1155Core_TokenAlreadyExist(ids[i]);
 
-        for (uint256 i = 0; i < ids.length; ++i)
             _tokenURIs[ids[i]] = tokenUris[i];
+        }
+
+        _mintBatch(to, ids, amounts, data);
     }
 
     function burn(
@@ -222,19 +209,20 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         onlyActiveIssuerOrItself
         onlyAssociatedIssuer(id)
         onlyUnlockedToken(id)
+        nonReentrant
     {
         if (account != _msgSender() && !isApprovedForAll(account, _msgSender()))
             revert ERC1155MissingApprovalForAll(_msgSender(), account);
 
-        _burn(account, id, amount);
         delete _tokenURIs[id];
+        _burn(account, id, amount);
     }
 
     function burnBatch(
         address account,
         uint256[] memory ids,
         uint256[] memory amounts
-    ) public onlyActiveIssuerOrItself {
+    ) public onlyActiveIssuerOrItself nonReentrant {
         if (account != _msgSender() && !isApprovedForAll(account, _msgSender()))
             revert ERC1155MissingApprovalForAll(_msgSender(), account);
 
@@ -257,7 +245,7 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         uint256 id,
         uint256 value,
         bytes memory data
-    ) public override onlyUnlockedToken(id) {
+    ) public override onlyUnlockedToken(id) nonReentrant {
         super.safeTransferFrom(from, to, id, value, data);
     }
 
@@ -267,8 +255,8 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         uint256[] memory ids,
         uint256[] memory values,
         bytes memory data
-    ) public override {
-        for (uint256 i = 0; i <= ids.length; i++) {
+    ) public override nonReentrant {
+        for (uint256 i = 0; i < ids.length; i++) {
             if (_lockedTokens[ids[i]])
                 revert ERC1155Core_TokenAlreadyLocked(ids[i]);
         }
@@ -282,14 +270,9 @@ contract ERC1155Core is ERC1155Supply, AccessControl {
         return bytes(tokenURI).length > 0 ? tokenURI : super.uri(id);
     }
 
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view virtual override(ERC1155, AccessControl) returns (bool) {
-        return super.supportsInterface(interfaceId);
-    }
-
     function _setURI(uint256 id, string memory tokenURI_) internal {
-        _tokenURIs[id] = tokenURI_;
         emit URI(uri(id), id);
+
+        _tokenURIs[id] = tokenURI_;
     }
 }

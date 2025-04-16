@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/**
- * THIS IS AN INITIAL CONTRACT THAT USES HARDCODED VALUES FOR CLARITY.
- * THIS IS AN INITIAL CONTRACT THAT USES UN-AUDITED CODE.
- * DO NOT USE THIS CODE IN PRODUCTION.
- */
-
 import {FunctionsSource} from "./FunctionsSource.sol";
 import {RealWorldAssetToken} from "./RealWorldAssetToken.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
