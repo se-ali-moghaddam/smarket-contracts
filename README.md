@@ -42,4 +42,3 @@ This is a **practice** and **non-production** project created for educational pu
 - On-chain property verification mechanisms  
 - Integration with lending or trading protocols  
 - Multi-property minting and metadata registry
-- 
